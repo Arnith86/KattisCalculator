@@ -7,13 +7,21 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-//Console.SetIn(new StreamReader(".\\calculator\\calculator.in"));
+//Console.SetIn(new StreamReader(".\\calculator\\calculator_edge.txt"));
+
+
+/*
+ * This solution will not handle the equation using the infix notation. It will instead handle it using 
+ * postfix notation. After converting the infix equation to post fix. The Reverse Polish method will be 
+ * used to solve the mathematical equations.
+ */
+
 
 // Selects the correct culture info (for this test)
 Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
 
 Regex numberRegex = new Regex(@"^-?\d+(\.\d+)?$");
-Regex arithmeticRegex = new Regex(@"^[\+\-\* \/]$");
+Regex arithmeticRegex = new Regex(@"^[\+\-\*\/\(\)]$");
 
 string input;
 List<string> equationToSolve = new List<string>();
@@ -26,14 +34,16 @@ while ((input = Console.ReadLine()) != null)
 	equationToSolve.Add(input.Replace(" ", ""));
 }
 
-
 foreach (string equation in equationToSolve)
 {
-	
+
 	if (equation.Length > 0)
 	{
+	
 		
-		double result = double.Parse(HandleParentheses(equation));
+		Queue<string> postfixEquation = PrepareEquation(Tokenizer(equation)); 
+		
+		double result = double.Parse( SolveEquation(postfixEquation) );
 
 		// Limits the decimal points to two
 		Console.WriteLine(result.ToString("F2"));
@@ -41,122 +51,59 @@ foreach (string equation in equationToSolve)
 	}
 }
 
-/*	Recursive method that handles all instances of parentheses in the current form of 
- *	the equation. It handles "complete" parentheses, meaning that the sub equation is 
- *	not handled until there as many "end" parentheses as "start" parentheses. 
- */
-string HandleParentheses(string equation)
+// Check if value is a number
+bool IsPartOfANumber(string value) => 
+	numberRegex.IsMatch(value) || value.Contains(".");
+
+
+// Converts from a single string into a list of strings.
+// Separating full integers, parentheses and operators.
+List<string> Tokenizer(string tokens) 
 {
-	string currentEquation = equation;
-	
-	Stack<int> parenthesesStart = new Stack<int>();
-	Queue<int> parenthesesEnd = new Queue<int>();
-
-	int startIndex = 0;
-	int endIndex = 0; 
-
-	string updatedEquation = string.Empty;
-	
-	
-	for (int i = 0; i < currentEquation.Length; i++)
-	{
-		if (currentEquation[i] == '(')	// Locates the start of a sub-equation
-		{
-			parenthesesStart.Push(i);
-			
-			// If this is the start of the first or outer parentheses then we register its index.
-			if (parenthesesStart.Count == 1) 
-				startIndex = i+1; // The parentheses itself is not included 
-		}
-		else if (currentEquation[i] == ')') // Locates the end of a sub-equation
-		{
-			parenthesesEnd.Enqueue(i);
-
-			// If both start en end collections have the same value, then we have found a complete sub equation
-			if (parenthesesEnd.Count == parenthesesStart.Count)
-			{
-				endIndex = i - startIndex; // The parentheses itself is not included 
-
-				// Solves the complete sub equation returning a single value
-				updatedEquation = string.Concat(updatedEquation,
-					HandleParentheses( 
-						currentEquation.Substring( startIndex, endIndex )
-					)
-				);
-
-				// On the return the parentheses should be solved. 
-				parenthesesStart.Clear();
-				parenthesesEnd.Clear();
-			}
-		}
-		else if (parenthesesStart.Count == 0)  // Not part of parentheses, simply added to new equation.
-		{	
-			updatedEquation = string.Concat(updatedEquation, equation[i]);
-		}
-	}
-
-	// Solves the sub or complete equation
-	return PrepareEquation(updatedEquation);
-}
-
-string PrepareEquation(string equation)
-{
-	List<string> equationList = new List<string>();
+	List<string> tokenList = new List<string>();
 
 	string intStringValue = string.Empty;
+
 	string outerCharacter = string.Empty;
 
-	bool prevTokenWasOperation = false;
-	
-	for (int i = 0; i < equation.Count(); i++)
+	for (int i = 0; i < tokens.Length; i++)
 	{
-		//// The highest value the integer can have is 500.
-		//// Hence the limit of the forward search to current index and two forward.
-		//int iterationLimit = i + 3;
-
-		outerCharacter = equation[i].ToString();
-
-		// Adds operations to the list
+		outerCharacter = tokens[i].ToString();
+		
+		// Adds operators and parentheses to the token list
 		if (arithmeticRegex.IsMatch(outerCharacter))
 		{
-			// Checks if the previous token was an operation. Only add operation to list if it is
-			// not a part of an integer otherwise, prepare it for next integer to be placed in list.
-			if (i - 1 > -1)
-			{ 
-				if (arithmeticRegex.IsMatch(equation[i - 1].ToString()))
-				{
-					intStringValue = string.Concat(intStringValue, outerCharacter);
-				}
-				else
-				{
-					equationList.Add(outerCharacter);
-				}
+			// Separates operator and numeric "-"
+			if (tokens[i] == '-' && IsUnaryMinus(i, tokens))
+			{
+				intStringValue = "-";
+				continue;
 			}
 			else
 			{
-				intStringValue = string.Concat(intStringValue, outerCharacter);
+				tokenList.Add(outerCharacter);
 			}
 		}
-		else  // Adds integers to the list
+		else  // Adds numerical tokens to the output stack
 		{
 			string innerCharacter = string.Empty;
 
-			for (int j = i; j < equation.Count(); j++)
+			for (int j = i; j < tokens.Count(); j++)
 			{
-				innerCharacter = equation[j].ToString();
+				innerCharacter = tokens[j].ToString();
 
 				bool isPartOfANumber = IsPartOfANumber(innerCharacter);
 
-				// adds more chars to the int value
-				if (isPartOfANumber /*&& j < iterationLimit*/) 
+				// adds more chars to the numerical value
+				if (isPartOfANumber)
 				{
 					intStringValue = string.Concat(intStringValue, innerCharacter);
 					i = j;
 				}
 				else
 				{
-					// Next char is an operation, add the complete number to equationList
-					equationList.Add(intStringValue);
+					// Next char is an operation, add the complete number to output stack
+					tokenList.Add(intStringValue);
 					intStringValue = string.Empty;
 					break;
 				}
@@ -164,83 +111,177 @@ string PrepareEquation(string equation)
 		}
 	}
 
-	// Adds the last integer to the list. 
-	if (equation.Length > 0)
-		equationList.Add(intStringValue);
+	// Adds the final numerical token to the list 
+	if (intStringValue != "") tokenList.Add(intStringValue);
 
-	// First solves multiplication and division then additions and subtractions.
-	return SolveEquation(
-				SolveEquation(equationList, "*", "/"),
-				"+", "-").FirstOrDefault();
-	
+	return tokenList;
 }
 
-bool IsPartOfANumber(string value) => numberRegex.IsMatch(value) || value.Contains(".");
-
-
-List<string> SolveEquation(List<string> equationList, string rule1, string rule2)
+// Checks if the current minus is an operation or part of number
+// If equation starts with "-" or the token before is not a number,
+// then it is part of a number.
+bool IsUnaryMinus(int index, string tokens)
 {
-	string operation = string.Empty;
+	if (index == 0) return true;
 
-	Queue<double> variableValues = new Queue<double>();
-	List<string> updatedEquation = new List<string>();
+	string prevToken = string.Empty;
+	
+	if (index - 1 > -1)
+		prevToken = tokens[index - 1].ToString();
 
-	// Adds first integer to list 
-	variableValues.Enqueue(double.Parse(equationList[0]));
+	return prevToken == "(" || arithmeticRegex.IsMatch(prevToken);
+}
 
-	for (int i = 1; i < equationList.Count; i++)
+// Uses the Shunting-Yard Algorithm to go from infix to postfix
+Queue<string> PrepareEquation(List<string> token)
+{
+	Queue<string> outputStack = new Queue<string>();
+	Stack<string> operatorStack = new Stack<string>();
+	 
+
+	string currentToken = string.Empty;
+
+	for (int i = 0; i < token.Count; i++)
 	{
-		bool isPartOfANumber = IsPartOfANumber(equationList[i]);
+		currentToken = token[i];
 
-		// Collects variables and operations to calculate 
-		if (isPartOfANumber)
+		if (currentToken == "(")
 		{
-			variableValues.Enqueue(double.Parse(equationList[i]));
+			operatorStack.Push(currentToken);
 		}
-		else
+		else if (currentToken == ")") // Pops all tokens found within the parentheses (but not the parentheses them self).
 		{
-			operation = equationList[i];
-		}
+			string tempToken = string.Empty;
 
-		if (variableValues.Count == 2)
-		{
-			if(operation == rule1 || operation == rule2)
+			while (operatorStack.Count > 0)
 			{
-				variableValues.Enqueue(PerformOperation(variableValues, operation));
-			}
-			else
-			{
-				updatedEquation.Add(variableValues.Dequeue().ToString());
-				updatedEquation.Add(operation);
+				tempToken = operatorStack.Pop();
+				
+				if (tempToken != "(")
+					outputStack.Enqueue(tempToken);
+				else 
+					break;
 			} 
+		}  
+		else if (arithmeticRegex.IsMatch(currentToken)) // Adds operations to the list
+		{
+			// Only pop from operator stack if top operator token has equal or higher precedence then current operator.
+			// "(" does not count as an operator and will result in a push to operator no matter the operator.
+			while (operatorStack.Count > 0)
+			{
+				var topOperatorToken = operatorStack.Peek();
+				
+				// Removes the start parentheses 
+				if (topOperatorToken == "(")
+					break;
+			
+							
+				if (ShouldPop(currentToken, topOperatorToken))
+					outputStack.Enqueue(operatorStack.Pop());
+				else break;
+			}
+						
+			operatorStack.Push(currentToken);
+			
+		}
+		else  // Adds numerical tokens to the output stack
+		{
+			outputStack.Enqueue(currentToken);
 		}
 	}
 
-	// Performs the final operation and adds the final value
-	//variableValues.Enqueue(PerformOperation(variableValues, operation));
-	updatedEquation.Add(variableValues.Dequeue().ToString());
+	// Pops the reminding operator to output stack.  
+	while (operatorStack.Count > 0) outputStack.Enqueue(operatorStack.Pop());
+
+	return outputStack; 
+}
+
+// Sets the precedence value
+int OperatorTokenValue(string token)
+{
+	int value = 0;
+
+	switch (token)
+	{
+		case "*":
+			value = 2; break;
+		case "/":
+			value = 2; break; 
+		case "-":
+			value = 1; break; 
+		case "+":
+			value = 1; break; 
+		default:
+			break;
+	}
+
+	return value;
+}
+
+// Checks if top stack operator has higher precedence 
+bool ShouldPop(string currentOperator, string stackOperator)
+{
+	int current = OperatorTokenValue(currentOperator);
+	int stack = OperatorTokenValue(stackOperator);
+
+	return stack >= current; 
+}
+
+// Solves an equation in reverse polish order. (postfix)
+string SolveEquation(Queue<string> tokens)
+{
+	Stack<double> numberTokens = new Stack<double>();
+	double result = 0;
 	
-	return updatedEquation;
+	if (tokens.Count > 1)
+	{
+		while (tokens.Count > 0)
+		{
+			string token = tokens.Dequeue();
+
+			if (numberRegex.IsMatch(token) && !(token.Equals("-")))
+			{
+				numberTokens.Push(double.Parse(token));
+			}
+			else
+			{
+				result =
+					PerformOperation(
+						numberTokens.Pop(), // Right variable
+						numberTokens.Pop(), // Left variable
+						token				// Operator
+					);
+
+				numberTokens.Push(result);
+			}
+		}
+	}
+	else
+	{	// Handles instances with only a singer numerical input.
+		return tokens.Dequeue().ToString();
+	}
+
+	return numberTokens.Pop().ToString();
 }
 
 
-double PerformOperation(Queue<double> variables, string operation)
+double PerformOperation(double rightValue, double leftValue, string operation)
 {
 	double result = 0;
 
 	switch (operation)
 	{
 		case "*":
-			result = variables.Dequeue() * variables.Dequeue();
+			result = leftValue * rightValue;
 			break;
 		case "/":
-			result = variables.Dequeue() / variables.Dequeue();
+			result = leftValue / rightValue;
 			break;
 		case "-":
-			result = variables.Dequeue() - variables.Dequeue();
+			result = leftValue - rightValue;
 			break;
 		case "+":
-			result = variables.Dequeue() + variables.Dequeue();
+			result = leftValue + rightValue;
 			break;
 		default:
 			break;
