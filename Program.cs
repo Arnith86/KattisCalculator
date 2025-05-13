@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-//Console.SetIn(new StreamReader(".\\calculator\\calculator_edge.txt"));
+Console.SetIn(new StreamReader(".\\calculator\\calculator_edge.txt"));
 
 
 /*
@@ -20,7 +20,9 @@ using System.Threading.Tasks;
 // Selects the correct culture info (for this test)
 Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
 
+// Matches "numbers" and "." or any combination of both.
 Regex numberRegex = new Regex(@"^-?\d+(\.\d+)?$");
+// Matches - + * / ( ) 
 Regex arithmeticRegex = new Regex(@"^[\+\-\*\/\(\)]$");
 
 string input;
@@ -39,15 +41,12 @@ foreach (string equation in equationToSolve)
 
 	if (equation.Length > 0)
 	{
-	
-		
 		Queue<string> postfixEquation = PrepareEquation(Tokenizer(equation)); 
 		
 		double result = double.Parse( SolveEquation(postfixEquation) );
 
 		// Limits the decimal points to two
 		Console.WriteLine(result.ToString("F2"));
-		//Console.Write(": {0} \n", equation);
 	}
 }
 
@@ -129,7 +128,12 @@ bool IsUnaryMinus(int index, string tokens)
 	if (index - 1 > -1)
 		prevToken = tokens[index - 1].ToString();
 
-	return prevToken == "(" || arithmeticRegex.IsMatch(prevToken);
+	return
+		prevToken == "(" ||
+		prevToken == "+" ||
+		prevToken == "-" ||
+		prevToken == "*" ||
+		prevToken == "/";
 }
 
 // Uses the Shunting-Yard Algorithm to go from infix to postfix
@@ -145,14 +149,17 @@ Queue<string> PrepareEquation(List<string> token)
 	{
 		currentToken = token[i];
 
-		if (currentToken == "(")
+		if (currentToken == "(")  
 		{
+			// Add the start parentheses. Indicates where to stop the popping loop when the end parentheses is encountered.
 			operatorStack.Push(currentToken);
 		}
-		else if (currentToken == ")") // Pops all tokens found within the parentheses (but not the parentheses them self).
+		else if (currentToken == ")") // All values "within" the parentheses are popped.
 		{
 			string tempToken = string.Empty;
 
+			// Pops all tokens found within the parentheses (but not the parentheses them self).
+			// And place them in the output queue.
 			while (operatorStack.Count > 0)
 			{
 				tempToken = operatorStack.Pop();
@@ -171,11 +178,10 @@ Queue<string> PrepareEquation(List<string> token)
 			{
 				var topOperatorToken = operatorStack.Peek();
 				
-				// Removes the start parentheses 
+				// If top operator in stack is (, then nothing is done.
 				if (topOperatorToken == "(")
 					break;
 			
-							
 				if (ShouldPop(currentToken, topOperatorToken))
 					outputStack.Enqueue(operatorStack.Pop());
 				else break;
@@ -235,6 +241,10 @@ string SolveEquation(Queue<string> tokens)
 	
 	if (tokens.Count > 1)
 	{
+		// Keeps pushing numerical values until a operation is encountered.
+		// When an operation is encountered the two topmost values are taken and
+		// the calculation is performed. The value is then pushed back onto the stack for 
+		// use in the next operation (if any).
 		while (tokens.Count > 0)
 		{
 			string token = tokens.Dequeue();
@@ -263,7 +273,6 @@ string SolveEquation(Queue<string> tokens)
 
 	return numberTokens.Pop().ToString();
 }
-
 
 double PerformOperation(double rightValue, double leftValue, string operation)
 {
